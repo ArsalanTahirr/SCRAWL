@@ -12,7 +12,7 @@
 
 ---
 
-## 🚀 Overview
+## Overview
 
 **SCRAWL** is a highly concurrent, lock-safe, and memory-efficient web crawler built from scratch in C11. It is designed to navigate the web rapidly using `libcurl` and `pthreads`, aggressively fetching HTML, tracking URL states, and scraping domain linkages in real time. 
 
@@ -20,7 +20,7 @@ SCRAWL ships with two complete front-ends:
 1. **The CLI:** A headless, pipeline-ready command line interface.
 2. **The GUI:** A stunning, fully interactive dashboard built with **Raylib**, featuring live-updating progress bars, dynamic log tables, and custom-built native text fields.
 
-## ✨ Features
+## Features
 
 - **Blazing Fast Concurrency:** Built entirely on POSIX threads (`pthreads`) using advanced lock-free atomics and condition variables to eliminate race conditions.
 - **Robust Politeness:** Native server-side `robots.txt` parsing and memory-efficient local caching ensure the crawler respects site rules automatically.
@@ -31,7 +31,7 @@ SCRAWL ships with two complete front-ends:
 
 ---
 
-## 🛠️ Build Instructions
+## Build Instructions
 
 ### Dependencies
 Before building, ensure you have the required development libraries installed:
@@ -67,7 +67,7 @@ make clean
 
 ---
 
-## 💻 Usage
+## Usage
 
 ### Command Line Interface (CLI)
 
@@ -107,7 +107,7 @@ The Raylib GUI provides a gorgeous visual experience to configure and monitor yo
 
 ---
 
-## 🏗️ Architecture & Internal Mechanics
+## Architecture & Internal Mechanics
 
 SCRAWL is engineered for strict memory safety and zero data-races:
 *   **Hash Table:** Uses a custom DJB2 hash-table under a Reader-Writer lock (`pthread_rwlock_t`) for extremely fast O(1) duplicate URL detection.
@@ -116,7 +116,7 @@ SCRAWL is engineered for strict memory safety and zero data-races:
 
 ---
 
-## 📝 License
+## License
 
 Designed and Maintained by **Arsalan Tahir**.
 All Rights Reserved.
