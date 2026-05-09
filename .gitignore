@@ -4,8 +4,8 @@
 *.so
 *.out
 *.exe
-./crawler
-./crawler-gui
+crawler
+crawler-gui
 *.jsonl
 
 # Coverage/profiling
