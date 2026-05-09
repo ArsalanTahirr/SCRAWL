@@ -17,7 +17,8 @@ RAYLIB_LDFLAGS = -L/usr/local/lib -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
 TARGET     = crawler
 GUI_TARGET = crawler-gui
 
-ARGS ?= https://example.com
+FLAGS ?= 
+URL ?= https://example.com
 
 # -----------------------------------------------------------------------
 # CLI sources
@@ -58,7 +59,7 @@ $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 	@echo ""
 	@echo "Build successful!  Run: ./$(TARGET) [OPTIONS] <seed-url>"
-	@echo "               Or: make run ARGS=\"[OPTIONS] <seed-url>\""
+	@echo "               Or: make run FLAGS=\"[OPTIONS]\" URL=\"<seed-url>\""
 
 # -----------------------------------------------------------------------
 # GUI target
@@ -116,29 +117,29 @@ clean:
 	rm -f $(OBJS) $(GUI_OBJS) $(TARGET) $(GUI_TARGET)
 
 run: $(TARGET)
-	./$(TARGET) $(ARGS)
+	./$(TARGET) $(FLAGS) "$(URL)"
 
 run-gui: $(GUI_TARGET)
 	./$(GUI_TARGET)
 
 memcheck: $(TARGET)
 	valgrind --leak-check=full --error-exitcode=1 \
-	    ./$(TARGET) $(ARGS)
+	    ./$(TARGET) $(FLAGS) "$(URL)"
 
 help:
 	@echo ""
-	@echo "Usage:  make [target] [ARGS=\"...\"]"
+	@echo "Usage:  make [target] [FLAGS=\"...\"] [URL=\"...\"]"
 	@echo ""
 	@echo "Targets:"
 	@echo "  all        Build CLI crawler (default)"
 	@echo "  gui        Build Raylib GUI  (./crawler-gui)"
-	@echo "  run        Build + run CLI   (use ARGS= to pass flags)"
+	@echo "  run        Build + run CLI   (use FLAGS= and URL= to configure)"
 	@echo "  run-gui    Build + run GUI"
 	@echo "  memcheck   Run CLI under valgrind"
 	@echo "  clean      Remove all build artifacts"
 	@echo "  help       Show this help"
 	@echo ""
-	@echo "CLI flags (pass via ARGS=\"...\"):"
+	@echo "CLI flags (pass via FLAGS=\"...\"):"
 	@echo "  -t <N>     Threads       (default: 4)"
 	@echo "  -n <N>     Max pages     (default: 1)"
 	@echo "  -o <file>  JSONL output file"
@@ -147,6 +148,6 @@ help:
 	@echo "  -h         Crawler help"
 	@echo ""
 	@echo "Examples:"
-	@echo "  make run ARGS=\"-t 8 -n 500 -d -v https://example.com\""
+	@echo "  make run FLAGS=\"-t 8 -n 500 -d -v\" URL=\"https://example.com\""
 	@echo "  make gui && make run-gui"
 	@echo ""
