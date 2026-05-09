@@ -27,8 +27,7 @@ void init_crawler_context(crawler_context_t *ctx)
     pthread_rwlock_init(&ctx->visited_rwlock,   NULL);
     pthread_mutex_init(&ctx->robots_cache_lock, NULL);
     pthread_mutex_init(&ctx->output_lock,       NULL);
-
-    init_hash_table(&ctx->robots_hosts);
+    
     ctx->robots_cache = NULL;
     ctx->gui_log = NULL;
 
@@ -52,7 +51,6 @@ void destroy_crawler_context(crawler_context_t *ctx)
 {
     destroy_queue(&ctx->queue);
     destroy_hash_table(&ctx->visited);
-    destroy_hash_table(&ctx->robots_hosts);
 
     /* Free robots cache entries */
     struct robots_cache_entry *rc = ctx->robots_cache;
@@ -135,9 +133,18 @@ static robots_rules_t *get_robots_rules(crawler_context_t *ctx,
     struct robots_cache_entry *new_entry = malloc(sizeof(*new_entry));
     if (new_entry != NULL) {
         new_entry->host  = strdup(host);
-        new_entry->rules = rules;
-        new_entry->next  = ctx->robots_cache;
-        ctx->robots_cache = new_entry;
+        if (new_entry->host != NULL) {
+            new_entry->rules = rules;
+            new_entry->next  = ctx->robots_cache;
+            ctx->robots_cache = new_entry;
+        } else {
+            free(new_entry);
+            robots_free(rules);
+            rules = NULL;
+        }
+    } else {
+        robots_free(rules);
+        rules = NULL;
     }
 
     pthread_mutex_unlock(&ctx->robots_cache_lock);
@@ -229,6 +236,12 @@ static char *acquire_url(crawler_context_t *ctx)
         if (ctx->shutdown_flag || (ctx->pages_fetched >= ctx->max_pages)) {
             pthread_mutex_unlock(&ctx->queue_lock);
             return NULL;
+        }
+
+        /* Prevent over-fetching by throttling if active threads could reach max_pages */
+        if (ctx->pages_fetched + atomic_load(&ctx->active_threads) >= ctx->max_pages) {
+            pthread_cond_wait(&ctx->queue_cond, &ctx->queue_lock);
+            continue;
         }
 
         /* Is there work waiting? */
