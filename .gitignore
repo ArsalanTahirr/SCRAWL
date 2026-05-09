@@ -5,6 +5,8 @@
 *.out
 *.exe
 ./crawler
+./crawler-gui
+*.jsonl
 
 # Coverage/profiling
 *.gcno
