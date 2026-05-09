@@ -85,46 +85,127 @@ static bool draw_button(Rectangle rect, const char *text, Color bg, Color fg) {
     return clicked;
 }
 
+static char *g_active_buffer = NULL;
+static int g_cursor_pos = 0;
+static float g_scroll_offset = 0.0f;
+
 static bool draw_input_box(Rectangle rect, char *buffer, int max_len, bool active, bool error, bool numeric_only) {
     Vector2 mouse = GetMousePosition();
     bool hover = CheckCollisionPointRec(mouse, rect);
     bool clicked = hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+
+    int len = strlen(buffer);
+    int local_cursor = len;
+    float local_scroll = 0.0f;
+
+    if (active) {
+        if (g_active_buffer != buffer) {
+            g_active_buffer = buffer;
+            g_cursor_pos = len;
+            g_scroll_offset = 0.0f;
+        }
+        if (g_cursor_pos > len) g_cursor_pos = len;
+        local_cursor = g_cursor_pos;
+    }
 
     Color border = error ? C_RED : (active ? C_ACCENT : C_BORDER);
     DrawRectangleRec(rect, C_SURFACE);
     DrawRectangleLinesEx(rect, 2, border);
 
     float font_sz = 40.0f; 
-    draw_text(buffer, rect.x + 15, rect.y + (rect.height - font_sz)/2, font_sz, C_TEXT_PRI);
+    float max_visible_width = rect.width - 30;
+
+    // Calculate cursor position in pixels
+    char prefix[1024] = {0};
+    strncpy(prefix, buffer, local_cursor);
+    float cursor_px = measure_text(prefix, font_sz);
+
+    // Adjust scroll offset to keep cursor visible
+    if (active) {
+        if (cursor_px - g_scroll_offset > max_visible_width - 15) {
+            g_scroll_offset = cursor_px - (max_visible_width - 15);
+        } else if (cursor_px - g_scroll_offset < 0) {
+            g_scroll_offset = cursor_px;
+        }
+        local_scroll = g_scroll_offset;
+    }
+
+    float text_x = rect.x + 15 - local_scroll;
+
+    BeginScissorMode((int)rect.x, (int)rect.y, (int)rect.width, (int)rect.height);
+
+    draw_text(buffer, text_x, rect.y + (rect.height - font_sz)/2, font_sz, C_TEXT_PRI);
 
     if (active) {
-        float tw = measure_text(buffer, font_sz);
-        
         // Blinking Cursor
         if ((int)(GetTime() * 2) % 2 == 0) {
-            DrawRectangle(rect.x + 17 + tw, rect.y + 12, 12, rect.height - 24, C_ACCENT);
+            float cursor_x = text_x + cursor_px + 2;
+            DrawRectangle((int)cursor_x, (int)(rect.y + 12), 4, (int)(rect.height - 24), C_ACCENT);
+        }
+
+        bool ctrl_down = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+        
+        // Navigation keys
+        if (IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT)) {
+            if (g_cursor_pos > 0) g_cursor_pos--;
+        }
+        if (IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_RIGHT)) {
+            if (g_cursor_pos < len) g_cursor_pos++;
+        }
+        if (IsKeyPressed(KEY_HOME)) g_cursor_pos = 0;
+        if (IsKeyPressed(KEY_END)) g_cursor_pos = len;
+
+        if (ctrl_down) {
+            if (IsKeyPressed(KEY_C)) {
+                SetClipboardText(buffer);
+            } else if (IsKeyPressed(KEY_X)) {
+                SetClipboardText(buffer);
+                buffer[0] = '\0';
+                g_cursor_pos = 0;
+            } else if (IsKeyPressed(KEY_V)) {
+                const char *clip = GetClipboardText();
+                if (clip != NULL) {
+                    int clip_len = strlen(clip);
+                    int space_left = max_len - 1 - len;
+                    if (space_left > 0) {
+                        int copy_len = (clip_len < space_left) ? clip_len : space_left;
+                        memmove(&buffer[g_cursor_pos + copy_len], &buffer[g_cursor_pos], len - g_cursor_pos + 1);
+                        memcpy(&buffer[g_cursor_pos], clip, copy_len);
+                        g_cursor_pos += copy_len;
+                    }
+                }
+            } else if (IsKeyPressed(KEY_BACKSPACE)) {
+                buffer[0] = '\0';
+                g_cursor_pos = 0;
+            }
         }
 
         // Standard typing
         int key = GetCharPressed();
         while (key > 0) {
-            if ((key >= 32) && (key <= 125)) {
-                if ((int)strlen(buffer) < max_len - 1) {
+            if (!ctrl_down && (key >= 32) && (key <= 125)) {
+                if (len < max_len - 1) {
                     if (!numeric_only || isdigit(key)) {
-                        int len = strlen(buffer);
-                        buffer[len] = (char)key;
-                        buffer[len+1] = '\0';
+                        memmove(&buffer[g_cursor_pos + 1], &buffer[g_cursor_pos], len - g_cursor_pos + 1);
+                        buffer[g_cursor_pos] = (char)key;
+                        g_cursor_pos++;
+                        len++;
                     }
                 }
             }
             key = GetCharPressed();
         }
 
-        if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE)) {
-            int len = strlen(buffer);
-            if (len > 0) buffer[len-1] = '\0';
+        if (!ctrl_down && (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE))) {
+            if (g_cursor_pos > 0) {
+                memmove(&buffer[g_cursor_pos - 1], &buffer[g_cursor_pos], len - g_cursor_pos + 1);
+                g_cursor_pos--;
+            }
         }
     }
+
+    EndScissorMode();
+
     return clicked;
 }
 
@@ -315,9 +396,9 @@ int gui_draw_dashboard(gui_state_t *gs, void *ctx_ptr, gui_log_t *log, double el
     DrawRectangle(lx, ty, form_w, 70, C_SURFACE);
     draw_text("URL", lx + 20, ty + 15, 36, C_TEXT_MUT);
     
-    int c2 = lx + form_w - 450;
-    int c3 = lx + form_w - 280;
-    int c4 = lx + form_w - 140;
+    int c2 = lx + form_w - 640;
+    int c3 = lx + form_w - 480;
+    int c4 = lx + form_w - 320;
     
     draw_text("Status", c2, ty + 15, 36, C_TEXT_MUT);
     draw_text("Links", c3, ty + 15, 36, C_TEXT_MUT);
@@ -348,10 +429,24 @@ int gui_draw_dashboard(gui_state_t *gs, void *ctx_ptr, gui_log_t *log, double el
         else if (e->http_status >= 400) c = C_RED;
         else if (e->http_status == 0) c = C_ORANGE; // skipped
 
-        char trunc_url[80];
-        strncpy(trunc_url, e->url, 80);
-        trunc_url[65] = '\0';
-        if (strlen(e->url) > 65) strcat(trunc_url, "...");
+        char trunc_url[2048];
+        strncpy(trunc_url, e->url, sizeof(trunc_url) - 1);
+        trunc_url[sizeof(trunc_url)-1] = '\0';
+        
+        float max_url_width = (c2 - (lx + 20)) - 30; // 30px padding before Status column
+        if (measure_text(trunc_url, 32) > max_url_width) {
+            int len = strlen(trunc_url);
+            while (len > 0) {
+                trunc_url[len] = '\0';
+                char temp[2048];
+                snprintf(temp, sizeof(temp), "%s...", trunc_url);
+                if (measure_text(temp, 32) <= max_url_width) {
+                    strcpy(trunc_url, temp);
+                    break;
+                }
+                len--;
+            }
+        }
 
         draw_text(trunc_url, lx + 20, row_y + 12, 32, C_TEXT_PRI);
 
