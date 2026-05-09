@@ -38,7 +38,6 @@ typedef struct crawler_context {
      * NULL value means "not yet fetched"; we use a sentinel to mean
      * "fetched but allow-all".  Protected by robots_cache_lock. */
     pthread_mutex_t  robots_cache_lock;
-    hash_table_t     robots_hosts;   /* just tracks which hosts we have fetched */
     /* Actual rules stored as parallel arrays would be complex; instead we
      * store them inline in a linked list keyed by host. */
     struct robots_cache_entry {
