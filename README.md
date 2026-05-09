@@ -1,6 +1,11 @@
 # SCRAWL 🕷️
 
 <p align="center">
+  <img src="https://img.shields.io/badge/Language-C11-blue.svg" alt="C11">
+  <img src="https://img.shields.io/badge/Platform-Linux-lightgrey.svg" alt="Linux">
+  <img src="https://img.shields.io/badge/GUI-Raylib-red.svg" alt="Raylib">
+  <img src="https://img.shields.io/badge/Networking-libcurl-green.svg" alt="libcurl">
+  <br><br>
   <b>A Lightning-Fast, Multithreaded Web Crawler in C (CLI & GUI)</b><br>
   <i>Developed by Arsalan Tahir</i>
 </p>
