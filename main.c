@@ -164,11 +164,20 @@ int main(int argc, char *argv[])
         ctx.seed_host = strdup(host_buf);
     }
 
+    char *actual_output_path = NULL;
     /* Open JSONL output file */
     if (output_path != NULL) {
-        ctx.output_file = fopen(output_path, "w");
+        actual_output_path = strdup(output_path);
+        size_t len = strlen(actual_output_path);
+        if (len < 6 || strcmp(actual_output_path + len - 6, ".jsonl") != 0) {
+            actual_output_path = realloc(actual_output_path, len + 7);
+            strcat(actual_output_path, ".jsonl");
+        }
+
+        ctx.output_file = fopen(actual_output_path, "w");
         if (ctx.output_file == NULL) {
             perror("fopen output file");
+            free(actual_output_path);
             destroy_crawler_context(&ctx);
             curl_global_cleanup();
             return EXIT_FAILURE;
@@ -228,11 +237,12 @@ int main(int argc, char *argv[])
     printf("Pages skipped  : %d\n",  atomic_load(&ctx.pages_skipped));
     printf("URLs visited   : %zu\n", ctx.visited.count);
     printf("Elapsed time   : %.2f s\n", elapsed);
-    if (output_path)
-        printf("Results file   : %s\n", output_path);
+    if (actual_output_path)
+        printf("Results file   : %s\n", actual_output_path);
     printf("======================\n");
 
     /* ---- 9. Cleanup ---- */
+    free(actual_output_path);
     if (ctx.output_file != NULL) {
         fclose(ctx.output_file);
         ctx.output_file = NULL;
