@@ -231,7 +231,7 @@ static char *build_absolute_url(const char *base_url, const char *href)
                 while (w > out && *(w-1) != '/') w--;
             }
             r += 3;
-            if (*r == '/') r++;
+            if (*r == '/' && w > out && *(w-1) == '/') r++;
         } else if (r[0] == '/' && r[1] == '.' &&
                    (r[2] == '/' || r[2] == '\0' || r[2] == '?' || r[2] == '#')) {
             /* Current dir — skip */
@@ -240,6 +240,7 @@ static char *build_absolute_url(const char *base_url, const char *href)
             *w++ = *r++;
         }
     }
+    if (w == out) *w++ = '/';
     *w = '\0';
 
     /* Reconstruct: scheme://host + resolved_path + remaining (query/frag) */
