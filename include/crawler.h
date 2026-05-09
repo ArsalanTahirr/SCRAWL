@@ -14,7 +14,7 @@
 /* ------------------------------------------------------------------ */
 
 #define DEFAULT_NUM_THREADS  4
-#define DEFAULT_MAX_PAGES    200
+#define DEFAULT_MAX_PAGES    1
 #define CRAWLER_USER_AGENT   "multithreaded-crawler/1.0 (educational)"
 
 /* ------------------------------------------------------------------ */
@@ -23,7 +23,7 @@
  * One instance is created in main() and a pointer is passed to every  *
  * worker thread.  All inter-thread communication goes through here.    *
  * ------------------------------------------------------------------ */
-typedef struct {
+typedef struct crawler_context {
     /* ---- Work queue ---- */
     url_queue_t      queue;
     pthread_mutex_t  queue_lock;
@@ -46,6 +46,9 @@ typedef struct {
         robots_rules_t             *rules;   /* NULL = allow-all */
         struct robots_cache_entry  *next;
     } *robots_cache;
+
+    /* ---- GUI support ---- */
+    struct gui_log *gui_log;   /* Forward declared; NULL in CLI mode */
 
     /* ---- Runtime configuration ---- */
     int          num_threads;     /* -t flag                */

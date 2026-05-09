@@ -3,6 +3,10 @@
 #include "parse.h"
 #include "robots.h"
 
+#ifdef GUI_BUILD
+#include "../gui/gui.h"
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,6 +30,7 @@ void init_crawler_context(crawler_context_t *ctx)
 
     init_hash_table(&ctx->robots_hosts);
     ctx->robots_cache = NULL;
+    ctx->gui_log = NULL;
 
     atomic_init(&ctx->active_threads, 0);
     atomic_init(&ctx->pages_failed,   0);
@@ -220,6 +225,12 @@ static char *acquire_url(crawler_context_t *ctx)
     pthread_mutex_lock(&ctx->queue_lock);
 
     while (1) {
+        /* Shutdown requested (SIGINT or page cap reached) */
+        if (ctx->shutdown_flag || (ctx->pages_fetched >= ctx->max_pages)) {
+            pthread_mutex_unlock(&ctx->queue_lock);
+            return NULL;
+        }
+
         /* Is there work waiting? */
         if (!queue_is_empty(&ctx->queue)) {
             char *url = dequeue(&ctx->queue);
@@ -229,12 +240,6 @@ static char *acquire_url(crawler_context_t *ctx)
 
             pthread_mutex_unlock(&ctx->queue_lock);
             return url;
-        }
-
-        /* Shutdown requested (SIGINT or page cap reached) */
-        if (ctx->shutdown_flag) {
-            pthread_mutex_unlock(&ctx->queue_lock);
-            return NULL;
         }
 
         /*
@@ -301,6 +306,28 @@ static void register_and_enqueue(crawler_context_t *ctx,
 /* Worker thread main loop                                              */
 /* ------------------------------------------------------------------ */
 
+static int is_static_asset(const char *url) {
+    const char *exts[] = {
+        ".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
+        ".webp", ".mp4", ".webm", ".woff", ".woff2", ".ttf", ".eot", ".pdf",
+        ".zip", ".tar", ".gz", ".rar", ".mp3", ".wav", ".avi", ".mkv", NULL
+    };
+    const char *qmark = strchr(url, '?');
+    const char *hash = strchr(url, '#');
+    const char *end = url + strlen(url);
+    if (qmark && qmark < end) end = qmark;
+    if (hash && hash < end) end = hash;
+
+    size_t len = end - url;
+    for (int i = 0; exts[i] != NULL; i++) {
+        size_t elen = strlen(exts[i]);
+        if (len >= elen && strncasecmp(end - elen, exts[i], elen) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 void *worker_thread(void *arg)
 {
     crawler_context_t *ctx = (crawler_context_t *)arg;
@@ -309,6 +336,17 @@ void *worker_thread(void *arg)
         /* ---- Step 1: Get a URL to process ---- */
         char *url = acquire_url(ctx);
         if (url == NULL) break;   /* shutdown */
+
+        if (is_static_asset(url)) {
+            atomic_fetch_add(&ctx->pages_skipped, 1);
+            
+            pthread_mutex_lock(&ctx->queue_lock);
+            atomic_fetch_sub(&ctx->active_threads, 1);
+            pthread_cond_broadcast(&ctx->queue_cond);
+            pthread_mutex_unlock(&ctx->queue_lock);
+            free(url);
+            continue;
+        }
 
         /* ---- Step 1b: robots.txt check ---- */
         /* Extract host and scheme from the URL */
@@ -334,7 +372,6 @@ void *worker_thread(void *arg)
 
                 /* Still mark work done */
                 pthread_mutex_lock(&ctx->queue_lock);
-                ctx->pages_fetched++;
                 atomic_fetch_sub(&ctx->active_threads, 1);
                 pthread_cond_broadcast(&ctx->queue_cond);
                 pthread_mutex_unlock(&ctx->queue_lock);
@@ -356,6 +393,7 @@ void *worker_thread(void *arg)
         init_link_list(&links);
 
         const char *outcome = "ok";
+        int was_successful_html = 0;
 
         if (fetch_ok != 0) {
             outcome = "fetch_error";
@@ -370,6 +408,7 @@ void *worker_thread(void *arg)
                 atomic_fetch_add(&ctx->pages_skipped, 1);
                 free_fetch_result(&result);
             } else {
+                was_successful_html = 1;
                 const char *scope_host = ctx->domain_scope ? ctx->seed_host : NULL;
                 extract_links(result.data, url, scope_host, &links);
                 free_fetch_result(&result);
@@ -379,19 +418,35 @@ void *worker_thread(void *arg)
         /* ---- Step 4: Register new links and enqueue them ---- */
         register_and_enqueue(ctx, &links);
 
-        /* ---- Step 5: Write JSONL result ---- */
+        /* ---- Step 5: Write JSONL result and GUI log ---- */
         write_jsonl_result(ctx, url,
                            result.http_status,
                            links.count,
                            outcome);
+
+#ifdef GUI_BUILD
+        if (ctx->gui_log != NULL) {
+            gui_log_push(ctx->gui_log, url, result.http_status, links.count, outcome);
+        }
+#endif
 
         free_link_list(&links);
 
         /* ---- Step 6: Mark work as complete ---- */
         pthread_mutex_lock(&ctx->queue_lock);
 
-        ctx->pages_fetched++;
-        LOG("[done]      %s  (total: %d)\n", url, ctx->pages_fetched);
+        if (was_successful_html) {
+            ctx->pages_fetched++;
+            LOG("[done]      %s  (total: %d)\n", url, ctx->pages_fetched);
+        } else {
+            if (ctx->verbose) {
+                LOG("[done]      %s  (skipped/failed)\n", url);
+            }
+        }
+
+        if (ctx->pages_fetched >= ctx->max_pages) {
+            ctx->shutdown_flag = 1;
+        }
 
         /* Decrement active count while holding the lock so that the
          * shutdown check in acquire_url() sees a consistent state */
