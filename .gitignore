@@ -1,0 +1,24 @@
+# Build artifacts
+*.o
+*.a
+*.so
+*.out
+*.exe
+
+# Coverage/profiling
+*.gcno
+*.gcda
+*.prof
+
+# Logs
+*.log
+
+# Build directories
+build/
+dist/
+
+# Editor/OS
+.vscode/
+*.swp
+*~
+.DS_Store
