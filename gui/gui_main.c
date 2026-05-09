@@ -18,7 +18,7 @@
 
 static crawler_context_t g_ctx;
 static gui_log_t         g_log;
-static pthread_t         g_threads[16];
+static pthread_t        *g_threads = NULL;
 static int               g_threads_created = 0;
 static double            g_start_time = 0;
 Font                     g_font;
@@ -56,9 +56,12 @@ static void start_crawl(gui_state_t *gs) {
     enqueue(&g_ctx.queue, gs->url_input);
 
     g_threads_created = 0;
-    for (int i = 0; i < g_ctx.num_threads; i++) {
-        if (pthread_create(&g_threads[i], NULL, worker_thread, &g_ctx) == 0) {
-            g_threads_created++;
+    g_threads = malloc(g_ctx.num_threads * sizeof(pthread_t));
+    if (g_threads != NULL) {
+        for (int i = 0; i < g_ctx.num_threads; i++) {
+            if (pthread_create(&g_threads[i], NULL, worker_thread, &g_ctx) == 0) {
+                g_threads_created++;
+            }
         }
     }
 
@@ -76,12 +79,17 @@ static void cleanup_crawl(void) {
             pthread_join(g_threads[i], NULL);
         }
         g_threads_created = 0;
+        free(g_threads);
+        g_threads = NULL;
     }
 
     if (g_ctx.output_file) {
         fclose(g_ctx.output_file);
         g_ctx.output_file = NULL;
     }
+
+    destroy_crawler_context(&g_ctx);
+    pthread_mutex_destroy(&g_log.lock);
 }
 
 /* ------------------------------------------------------------------ */
@@ -131,10 +139,6 @@ int main(void) {
         } else if (gs.screen == SCREEN_DASHBOARD) {
             double elapsed = GetTime() - g_start_time;
             
-            if (g_ctx.shutdown_flag || (g_ctx.pages_fetched >= g_ctx.max_pages) ||
-                (atomic_load(&g_ctx.active_threads) == 0 && queue_is_empty(&g_ctx.queue))) {
-            }
-
             if (gui_draw_dashboard(&gs, &g_ctx, &g_log, elapsed)) {
                 cleanup_crawl();
                 gs.screen = SCREEN_SETUP;
